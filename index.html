@@ -130,6 +130,13 @@
   textarea.ta{width:100%;min-height:120px;border:1px solid var(--line);border-radius:7px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical}
   .note{background:var(--card-2);border:1px solid var(--line);border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--ink-soft);margin-bottom:14px}
   .ing-row{display:grid;grid-template-columns:1fr 72px 64px 34px;gap:7px;margin-bottom:8px;align-items:center}
+  .sale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+  .sale-card{border:1px solid var(--line);border-radius:8px;padding:12px 13px;display:flex;flex-direction:column;gap:10px;background:var(--card-2)}
+  .sale-card .sc-name{font-weight:600;font-size:14.5px;line-height:1.25}
+  .sale-card .sc-sub{font-size:11.5px;color:var(--ink-faint);margin-top:2px}
+  .sale-card .sc-add{display:flex;gap:8px;align-items:center}
+  .sale-card .sc-qty{width:60px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;border:1px solid var(--line);border-radius:6px;padding:7px 4px;font-size:14px}
+  .sale-card .sc-add .btn{flex:1;justify-content:center}
   .bottlebar{margin-top:5px;max-width:150px}
   .bottlebar .track{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
   .bottlebar .fill{height:100%;border-radius:4px;background:var(--brass);transition:width .2s}
@@ -851,30 +858,48 @@ async function saveRecipe(e){e.preventDefault();const items2=recipeDraft.filter(
 async function delRecipe(id){if(!confirm('Delete this menu item?'))return;recipes=recipes.filter(r=>r.id!==id);await saveRecipes();updateNavBadges();renderMenu();}
 
 /* ---- daily sales ---- */
-let salesDate=new Date().toISOString().slice(0,10);
+let salesDate=localDate(),salesSec='kitchen',salesSearch='';
 function renderSales(){
+  const kc=recipes.filter(r=>r.outlet==='kitchen').length,bc=recipes.filter(r=>r.outlet==='bar').length;
   document.getElementById('view').innerHTML=`
-    <div class="page-head"><div><div class="page-title">Daily sales</div><div class="page-sub">Log what sold — ingredients deduct from the kitchen or bar automatically</div></div>
+    <div class="page-head"><div><div class="page-title">Daily sales</div><div class="page-sub">Tap what sold — ingredients deduct from the kitchen or bar automatically</div></div>
       <div class="head-actions"><input class="dt" type="date" id="sdate" value="${salesDate}" onchange="salesDate=this.value;renderSalesBody()"></div></div>
-    <div class="panel" style="margin-bottom:16px"><div class="panel-h"><h3>Add a sale</h3></div>
-      <div style="padding:16px 18px">
-        <div class="inline-add">
-          <div class="field"><label>Menu item</label><select id="s-recipe">${recipes.length?recipes.map(r=>`<option value="${r.id}">${esc(r.name)} · ${r.outlet==='bar'?'Bar':'Kitchen'}${r.price?' · '+money(r.price):''}</option>`).join(''):'<option value="">No menu items — add some first</option>'}</select></div>
-          <div class="field" style="max-width:110px"><label>Qty sold</label><input id="s-qty" type="number" min="1" step="1" value="1"></div>
-          <button class="btn" onclick="addSale()" ${recipes.length?'':'disabled'}>Add sale</button>
+    <div class="panel" style="margin-bottom:16px"><div class="panel-h"><h3>Add a sale</h3><span class="hint">pick a section, search, then Add</span></div>
+      <div style="padding:14px 18px">
+        <div class="seg" style="max-width:320px;margin-bottom:12px">
+          <button type="button" class="${salesSec==='kitchen'?'on':''}" onclick="salesSec='kitchen';renderSaleItems()">🍳 Kitchen (${kc})</button>
+          <button type="button" class="${salesSec==='bar'?'on':''}" onclick="salesSec='bar';renderSaleItems()">🍸 Bar (${bc})</button>
         </div>
+        <input class="search" id="ssearch" placeholder="Search ${salesSec} menu…" value="${esc(salesSearch)}" oninput="salesSearch=this.value;renderSaleItems()" style="margin-bottom:14px">
+        <div id="saleItems"></div>
       </div></div>
     <div id="salesBody"></div>`;
-  renderSalesBody();
+  renderSaleItems();renderSalesBody();
+}
+function renderSaleItems(){
+  const box=document.getElementById('saleItems');if(!box)return;
+  const ss=document.getElementById('ssearch');if(ss)ss.placeholder='Search '+salesSec+' menu…';
+  if(!recipes.length){box.innerHTML=`<div class="empty"><div class="big">No menu items yet</div><div>Add your dishes &amp; drinks first, then you can log sales here.</div><button class="btn sm" style="margin-top:12px" onclick="go('menu')">Go to Menu &amp; recipes</button></div>`;return;}
+  const q=salesSearch.trim().toLowerCase();
+  const secItems=recipes.filter(r=>r.outlet===salesSec);
+  const rs=secItems.filter(r=>!q||r.name.toLowerCase().includes(q)||(r.cat||'').toLowerCase().includes(q));
+  if(!rs.length){box.innerHTML=`<div class="empty"><div class="big">${secItems.length?'No matches':'No '+salesSec+' items'}</div><div>${secItems.length?'Try a different search.':'Add '+salesSec+' items in Menu &amp; recipes.'}</div></div>`;return;}
+  box.innerHTML=`<div class="sale-grid">${rs.map(r=>{const make=recipeMakeable(r);
+    return `<div class="sale-card">
+      <div class="sc-main"><div class="sc-name">${esc(r.name)}</div><div class="sc-sub">${r.price?money(r.price):'no price'}${r.cat?' · '+esc(r.cat):''} · can make ${make}</div></div>
+      <div class="sc-add"><input type="number" min="1" step="1" value="1" id="sq-${r.id}" class="sc-qty" onclick="this.select()"><button type="button" class="btn sm" onclick="addSale('${r.id}')">Add</button></div>
+    </div>`;}).join('')}</div>`;
 }
 function renderSalesBody(){
   const day=new Date(salesDate+'T00:00:00').toDateString();
   const rows=log.filter(e=>e.type==='sale'&&new Date(e.t).toDateString()===day).slice().reverse();
   const rev=rows.reduce((s,e)=>s+(e.value||0),0),cnt=rows.reduce((s,e)=>s+(e.qty||0),0);
   const cost=rows.reduce((s,e)=>s+(e.cost||0),0);
+  const kRev=rows.filter(e=>e.sec==='kitchen').reduce((s,e)=>s+(e.value||0),0);
+  const bRev=rows.filter(e=>e.sec==='bar').reduce((s,e)=>s+(e.value||0),0);
   document.getElementById('salesBody').innerHTML=`
     <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
-      <div class="stat blue"><div class="n" style="font-size:22px">${money(rev)}</div><div class="l">Revenue</div></div>
+      <div class="stat blue"><div class="n" style="font-size:22px">${money(rev)}</div><div class="l">Revenue</div><div class="foot">🍳 ${money(kRev)} · 🍸 ${money(bRev)}</div></div>
       <div class="stat"><div class="n">${cnt}</div><div class="l">Items sold</div></div>
       <div class="stat"><div class="n" style="font-size:22px">${money(cost)}</div><div class="l">Ingredient cost</div></div>
       <div class="stat ok"><div class="n" style="font-size:22px">${money(rev-cost)}</div><div class="l">Gross margin</div></div></div>
@@ -883,16 +908,15 @@ function renderSalesBody(){
         <tbody>${rows.map(e=>`<tr><td class="iname">${esc(e.name)}</td><td><span class="pill use">${SEC_LABEL[e.sec]||e.sec}</span></td><td class="num val">${e.qty}</td><td class="num val">${money(e.value||0)}</td><td class="num sub-inline">${new Date(e.t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td><td class="num"><button class="mini" title="Undo (restores stock)" onclick="undoSale('${e.t}')">↩</button></td></tr>`).join('')}</tbody></table>`
         :`<div class="empty"><div class="big">No sales logged</div><div>Add a sale above to start deducting stock.</div></div>`}</div>`;
 }
-async function addSale(){
-  const rid=document.getElementById('s-recipe').value;const qty=Math.max(1,Math.floor(parseFloat(document.getElementById('s-qty').value)||1));
-  const r=recipes.find(x=>x.id===rid);if(!r)return;
+async function addSale(rid){
+  const r=recipes.find(x=>x.id===rid);if(!r){alert('Pick a menu item first.');return}
+  const qEl=document.getElementById('sq-'+rid);const qty=Math.max(1,Math.floor(parseFloat(qEl&&qEl.value)||1));
   const short=[];r.items.forEach(c=>{const it=item(c.itemId);if(!it)return;const need=c.qty*qty,have=qtyAt(it,r.outlet);if(have<need)short.push(`${it.name}: need ${fmtN(need)} ${it.unit}, have ${fmtN(have)}`);});
-  if(short.length&&!confirm(`Not enough stock in the ${r.outlet} for:\n\n${short.join('\n')}\n\nLog the sale anyway (stock will floor at zero)?`))return;
+  if(short.length&&!confirm(`Not enough stock in the ${r.outlet} for:\n\n${short.join('\n')}\n\nLog the sale anyway (stock floors at zero)?`))return;
   let cost=0;r.items.forEach(c=>{const it=item(c.itemId);if(!it)return;const need=c.qty*qty;const removed=depleteAt(it,r.outlet,need);cost+=removed*(it.cost||0);});
   log.push({type:'sale',name:r.name,sec:r.outlet,detail:`${qty} × ${r.name}`,value:(r.price||0)*qty,cost,qty,recipeId:r.id,ing:r.items.map(c=>({itemId:c.itemId,qty:c.qty*qty})),who:settings.current,t:Date.now()});
   if(log.length>1500)log=log.slice(-1500);
-  await saveLog();await saveItems();updateNavBadges();renderSalesBody();
-  document.getElementById('s-qty').value='1';
+  await saveLog();await saveItems();updateNavBadges();renderSaleItems();renderSalesBody();
 }
 async function undoSale(t){const idx=log.findIndex(e=>e.type==='sale'&&String(e.t)===String(t));if(idx<0)return;const e=log[idx];
   if(!confirm(`Undo "${e.detail}"? Ingredients will be added back to the ${SEC_LABEL[e.sec]}.`))return;
