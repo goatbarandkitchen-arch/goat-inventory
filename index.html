@@ -163,6 +163,17 @@
     .ing-row{grid-template-columns:1fr 60px 56px 34px}
   }
   @media(min-width:861px){.mobile-top{display:none}}
+  @media(max-width:1080px){
+    main .grid[style*="repeat(4"]{grid-template-columns:repeat(2,1fr)!important}
+  }
+  @media(max-width:760px){
+    main .grid[style*="repeat(4"],main .grid[style*="repeat(3"],main .grid[style*="repeat(2"],
+    main .grid[style*="1.4fr"],main .grid[style*="1fr 1fr"]{grid-template-columns:1fr!important}
+    .page-title{font-size:23px}
+    .panel{overflow-x:auto}
+    thead th,tbody td{padding-left:11px;padding-right:11px}
+    .head-actions .btn{flex:1}
+  }
   #print-area{display:none}
   @media print{
     .app-shell,footer,.mobile-top,.overlay{display:none!important}
@@ -203,11 +214,11 @@
   <div class="modal-b"><form onsubmit="saveItem(event)">
     <div class="field"><label>Item name</label><input id="f-name" required placeholder="e.g. Chicken breast"></div>
     <div class="frow">
-      <div class="field"><label>Category</label><input id="f-cat" placeholder="Meat / Spirits"></div>
-      <div class="field"><label>Used in</label><select id="f-use"><option value="kitchen">Kitchen</option><option value="bar">Bar</option><option value="both">Both</option></select></div>
+      <div class="field"><label>Used in</label><select id="f-use" onchange="suggestPour()"><option value="kitchen">Kitchen</option><option value="bar">Bar</option><option value="both">Both</option></select></div>
+      <div class="field"><label>Stock unit <span class="unit">(how you count it)</span></label><input id="f-unit" placeholder="kg / L / btl / ml / pcs" required oninput="suggestPour()"></div>
     </div>
     <div class="frow">
-      <div class="field"><label>Stock unit</label><input id="f-unit" placeholder="kg / L / btl / ml" required></div>
+      <div class="field"><label>Category</label><input id="f-cat" placeholder="Meat / Spirits" oninput="suggestPour()"></div>
       <div class="field"><label>Vendor</label><select id="f-vendor"></select><button type="button" class="link-btn" onclick="quickVendor()">＋ New vendor</button></div>
     </div>
     <div class="frow">
@@ -220,7 +231,7 @@
       <div class="field"><label>Store par</label><input id="f-par" type="number" step="any" min="0" placeholder="20"></div>
     </div>
     <div class="frow" style="align-items:center">
-      <div class="field" style="margin:0"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink)"><input type="checkbox" id="f-pour" style="width:auto" onchange="document.getElementById('bottleWrap').style.display=this.checked?'':'none'"> Poured spirit — track bottle usage</label></div>
+      <div class="field" style="margin:0"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink)"><input type="checkbox" id="f-pour" style="width:auto" onchange="document.getElementById('bottleWrap').style.display=this.checked?'':'none'"> Poured spirit — pour in ml &amp; show bottle usage</label></div>
       <div class="field" id="bottleWrap" style="display:none"><label>Bottle size (ml)</label><input id="f-bottleml" type="number" step="any" min="0" placeholder="e.g. 750"></div>
     </div>
     <div id="initBatch"><div class="frow">
@@ -309,6 +320,25 @@
   </form></div>
 </div></div>
 
+<!-- EXPENSE -->
+<div class="overlay" id="expenseOverlay"><div class="modal">
+  <div class="modal-h"><h3 id="expenseTitle">Add expense</h3><div class="ms">Rent, salaries, bills, supplies — anything you pay out</div></div>
+  <div class="modal-b"><form onsubmit="saveExpense(event)">
+    <div class="field"><label>What is it for</label><input id="e-name" required placeholder="e.g. Shop rent, electricity bill"></div>
+    <div class="frow">
+      <div class="field"><label>Category</label><select id="e-cat"></select></div>
+      <div class="field"><label>Amount (₹)</label><input id="e-amount" type="number" step="any" min="0" required placeholder="0"></div>
+    </div>
+    <div class="frow">
+      <div class="field"><label>How often</label><select id="e-freq"><option value="once">One-time</option><option value="weekly">Every week</option><option value="monthly">Every month</option><option value="yearly">Every year</option></select></div>
+      <div class="field"><label>Date</label><input id="e-date" type="date"></div>
+    </div>
+    <div class="field"><label>Note <span class="unit">(optional)</span></label><input id="e-note" placeholder="Payee, reference…"></div>
+    <div class="hintline" id="e-hint"></div>
+    <div class="modal-actions"><button type="button" class="btn ghost" onclick="closeM('expenseOverlay')">Cancel</button><button type="submit" class="btn">Save expense</button></div>
+  </form></div>
+</div></div>
+
 <!-- DATA -->
 <div class="overlay" id="dataOverlay"><div class="modal wide">
   <div class="modal-h"><h3>Backup &amp; data</h3><div class="ms">Export, import, or move your inventory</div></div>
@@ -336,8 +366,8 @@
 </div></div>
 
 <script>
-const K_ITEMS='goat_items_v3',K_LOG='goat_log_v3',K_SET='goat_set_v3',K_VEN='goat_vendors_v3',K_REC='goat_recipes_v3';
-let items=[],log=[],vendors=[],recipes=[],settings={staff:['Manager'],current:'Manager',soon:5};
+const K_ITEMS='goat_items_v3',K_LOG='goat_log_v3',K_SET='goat_set_v3',K_VEN='goat_vendors_v3',K_REC='goat_recipes_v3',K_EXP='goat_expenses_v3',K_SNAP='goat_snapshots_v3';
+let items=[],log=[],vendors=[],recipes=[],expenses=[],valSnaps={},settings={staff:['Manager'],current:'Manager',soon:5};
 let view='dashboard',editId=null,qtyCtx=null,trCtx=null,recipeDraft=null,vendorReturn=null;
 const LOC={store:'Store room',kitchen:'Kitchen',bar:'Bar'};
 const SEC_LABEL={kitchen:'Kitchen',bar:'Bar',store:'Store room'};
@@ -345,22 +375,24 @@ const NAV=[
   {h:'Overview'},{id:'dashboard',ic:'◫',t:'Dashboard'},
   {h:'Inventory'},{id:'store',ic:'▦',t:'Store room'},{id:'kitchen',ic:'🍳',t:'Kitchen'},{id:'bar',ic:'🍸',t:'Bar'},
   {h:'Menu & sales'},{id:'menu',ic:'✦',t:'Menu & recipes'},{id:'sales',ic:'₹',t:'Daily sales'},
+  {h:'Money'},{id:'expenses',ic:'▣',t:'Expenses'},
   {h:'Purchasing'},{id:'vendors',ic:'☰',t:'Vendors'},{id:'reorder',ic:'⛿',t:'Reorder list'},
   {h:'Operations'},{id:'count',ic:'☑',t:'Stock count'},{id:'reports',ic:'▤',t:'Reports'},{id:'log',ic:'≣',t:'Activity log'},
 ];
 
 async function boot(){
   items=await sget(K_ITEMS);
-  if(items){ vendors=await sget(K_VEN)||[]; recipes=await sget(K_REC)||[]; log=await sget(K_LOG)||[]; }
-  else{ const mig=await migrateV2(); if(mig){({items,vendors,recipes,log}=mig);} else{const s=seed();items=s.items;vendors=s.vendors;recipes=s.recipes;log=[];}
-    await saveItems();await saveVendors();await saveRecipes();await saveLog(); }
+  if(items){ vendors=await sget(K_VEN)||[]; recipes=await sget(K_REC)||[]; log=await sget(K_LOG)||[]; expenses=await sget(K_EXP)||[]; valSnaps=await sget(K_SNAP)||{}; }
+  else{ const mig=await migrateV2(); if(mig){({items,vendors,recipes,log}=mig);} else{const s=seed();items=s.items;vendors=s.vendors;recipes=s.recipes;log=s.log||[];expenses=s.expenses;valSnaps=s.snaps||{};}
+    await saveItems();await saveVendors();await saveRecipes();await saveLog();await saveExpenses();await saveSnaps(); }
   const s=await sget(K_SET);if(s)settings={...settings,...s};
+  recordValueSnapshot();
   document.getElementById('loading').style.display='none';
   const f=document.querySelector('footer');if(f)f.textContent='GOAT — Signature Culinary · '+(CLOUD?'Synced to the cloud':'Saved on this device');
   buildNav();renderStaff();go('dashboard');
 }
 async function reloadAll(){
-  items=await sget(K_ITEMS)||items;vendors=await sget(K_VEN)||vendors;recipes=await sget(K_REC)||recipes;log=await sget(K_LOG)||log;
+  items=await sget(K_ITEMS)||items;vendors=await sget(K_VEN)||vendors;recipes=await sget(K_REC)||recipes;log=await sget(K_LOG)||log;expenses=await sget(K_EXP)||expenses;valSnaps=await sget(K_SNAP)||valSnaps;
   const s=await sget(K_SET);if(s)settings={...settings,...s};
   closeM('dataOverlay');updateNavBadges();renderStaff();go(view);
 }
@@ -387,7 +419,18 @@ async function sset(k,v){
   if(typeof window!=='undefined'&&window.storage){try{await window.storage.set(k,JSON.stringify(v))}catch(e){console.error(e)}return;}
   lset(k,v);
 }
-const saveItems=()=>sset(K_ITEMS,items),saveLog=()=>sset(K_LOG,log),saveSet=()=>sset(K_SET,settings),saveVendors=()=>sset(K_VEN,vendors),saveRecipes=()=>sset(K_REC,recipes);
+const saveItems=async()=>{await sset(K_ITEMS,items);recordValueSnapshot();},saveLog=()=>sset(K_LOG,log),saveSet=()=>sset(K_SET,settings),saveVendors=()=>sset(K_VEN,vendors),saveRecipes=()=>sset(K_REC,recipes),saveExpenses=()=>sset(K_EXP,expenses),saveSnaps=()=>sset(K_SNAP,valSnaps);
+function totalInvValue(){return items.reduce((s,i)=>s+itemValue(i),0)}
+function localDate(t){const d=t?new Date(t):new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function ymOf(t){return localDate(t).slice(0,7)}
+function currentYM(){return localDate().slice(0,7)}
+function prevYM(ym){const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-2,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function recordValueSnapshot(){const d=localDate();const v=totalInvValue();if(valSnaps[d]===v)return;valSnaps[d]=v;const ks=Object.keys(valSnaps).sort();if(ks.length>430){for(const k of ks.slice(0,ks.length-430))delete valSnaps[k];}saveSnaps();}
+function monthClose(ym){const ks=Object.keys(valSnaps).filter(d=>d.slice(0,7)===ym).sort();return ks.length?valSnaps[ks[ks.length-1]]:null}
+function monthOpen(ym){return monthClose(prevYM(ym))}
+function monthPurchases(ym){return log.filter(e=>['in','new'].includes(e.type)&&ymOf(e.t)===ym).reduce((s,e)=>s+(e.value||0),0)}
+function monthClosing(ym){return ym===currentYM()?totalInvValue():monthClose(ym)}
+function monthGoodsUsed(ym){const o=monthOpen(ym),c=monthClosing(ym),p=monthPurchases(ym);if(c==null)return null;return (o||0)+p-c}
 
 async function migrateV2(){
   const old=await sget('goat_items_v2');if(!old)return null;
@@ -406,7 +449,8 @@ function seed(){
   const vend=[V('Coastal Meats','Ravi','+91 90000 11111','Meat & poultry'),V('Konkan Traders','Sana','+91 90000 22222','Dry goods & oils'),
     V('Goa Dairy','','+91 90000 33333','Dairy'),V('Mapusa Mandi','','','Fresh produce'),V('Excise Depot','','+91 90000 44444','Spirits'),V('Beverage Co','Nikhil','+91 90000 55555','Mixers & beer')];
   const vid=n=>vend.find(v=>v.name===n).id;
-  const mk=(name,cat,use,unit,cost,ven,min,par,pu,conv,store,kit,bar)=>({id:uid(),name,cat,use,unit,cost,vendorId:vid(ven),punit:pu||'',conv:conv||0,min,par,
+  const mk=(name,cat,use,unit,cost,ven,min,par,pu,conv,store,kit,bar,bottleMl)=>({id:uid(),name,cat,use,unit,cost,vendorId:vid(ven),punit:pu||'',conv:conv||0,min,par,
+    pour:!!bottleMl,bottleMl:bottleMl||0,
     batches:[...(store||[]).map(b=>({id:uid(),qty:b[0],exp:b[1]||'',in:Date.now(),loc:'store'})),
              ...(kit||[]).map(b=>({id:uid(),qty:b[0],exp:b[1]||'',in:Date.now(),loc:'kitchen'})),
              ...(bar||[]).map(b=>({id:uid(),qty:b[0],exp:b[1]||'',in:Date.now(),loc:'bar'}))]});
@@ -418,22 +462,40 @@ function seed(){
     mk('Onions','Produce','both','kg',30,'Mapusa Mandi',8,25,'',0,[[18,'']],[[5,'']]),
     mk('Olive oil','Oils','kitchen','ml',1.2,'Konkan Traders',2000,8000,'tin',15000,[[15000,d(300)]],[[3000,d(300)]]),
     mk('Garam masala','Spices','kitchen','g',2.5,'Konkan Traders',300,1500,'',0,[[1200,d(180)]],[[400,'']]),
-    mk('Old Monk rum','Spirits','bar','ml',0.3,'Excise Depot',2000,10000,'btl',750,[[9000,'']],null,[[3200,'']]),
-    mk('Gin','Spirits','bar','ml',1.9,'Excise Depot',1500,6000,'btl',750,[[4500,'']],null,[[1400,'']]),
+    mk('Old Monk rum','Spirits','bar','btl',550,'Excise Depot',3,15,'case',12,[[12,'']],null,[[4.3,'']],750),
+    mk('Gin','Spirits','bar','btl',1200,'Excise Depot',2,8,'case',12,[[6,'']],null,[[1.9,'']],750),
     mk('Tonic water','Mixers','bar','btl',35,'Beverage Co',12,36,'crate',24,[[24,d(120)]],null,[[10,d(120)]]),
+    mk('Kingfisher beer','Beer','bar','btl',120,'Beverage Co',24,72,'crate',24,[[48,d(120)]],null,[[18,d(120)]]),
     mk('Fresh lime','Garnish','bar','kg',60,'Mapusa Mandi',4,8,'',0,[[3,d(6)]],null,[[1,d(4)]]),
-    mk('Draught lager keg','Beer','bar','keg',4500,'Beverage Co',2,4,'',0,[[1,d(20)]],null,[[1,d(5)]]),
   ];
   const iid=n=>its.find(i=>i.name===n).id;
   const rec=[
     {id:uid(),name:'Butter Chicken',outlet:'kitchen',cat:'Mains',price:420,items:[{itemId:iid('Chicken breast'),qty:0.25},{itemId:iid('Fresh cream'),qty:0.05},{itemId:iid('Tomatoes'),qty:0.15},{itemId:iid('Garam masala'),qty:8}]},
     {id:uid(),name:'Jeera Rice',outlet:'kitchen',cat:'Sides',price:180,items:[{itemId:iid('Basmati rice'),qty:0.12},{itemId:iid('Olive oil'),qty:10}]},
-    {id:uid(),name:'Gin & Tonic',outlet:'bar',cat:'Cocktails',price:350,items:[{itemId:iid('Gin'),qty:60},{itemId:iid('Tonic water'),qty:1},{itemId:iid('Fresh lime'),qty:0.02}]},
-    {id:uid(),name:'Old Monk & Coke',outlet:'bar',cat:'Cocktails',price:300,items:[{itemId:iid('Old Monk rum'),qty:60}]},
-    {id:uid(),name:'Pint of Lager',outlet:'bar',cat:'Beer',price:250,items:[{itemId:iid('Draught lager keg'),qty:0.0187}]},
+    {id:uid(),name:'Gin & Tonic',outlet:'bar',cat:'Cocktails',price:350,items:[{itemId:iid('Gin'),qty:0.08},{itemId:iid('Tonic water'),qty:1},{itemId:iid('Fresh lime'),qty:0.02}]},
+    {id:uid(),name:'Old Monk & Coke',outlet:'bar',cat:'Cocktails',price:300,items:[{itemId:iid('Old Monk rum'),qty:0.08}]},
+    {id:uid(),name:'Kingfisher (bottle)',outlet:'bar',cat:'Beer',price:250,items:[{itemId:iid('Kingfisher beer'),qty:1}]},
   ];
-  its.forEach(i=>{if(i.unit==='ml'&&/btl|bottle/i.test(i.punit||'')){i.pour=true;i.bottleMl=i.conv||750;}});
-  return {items:its,vendors:vend,recipes:rec};
+  const t=new Date().toISOString().slice(0,10);
+  const exp=[
+    {id:uid(),name:'Shop rent',cat:'Rent',amount:80000,freq:'monthly',date:t,note:''},
+    {id:uid(),name:'Staff salaries',cat:'Salaries',amount:120000,freq:'monthly',date:t,note:'Kitchen + floor + bar'},
+    {id:uid(),name:'Electricity',cat:'Utilities',amount:22000,freq:'monthly',date:t,note:''},
+    {id:uid(),name:'LPG / cooking gas',cat:'Gas',amount:6000,freq:'weekly',date:t,note:''},
+    {id:uid(),name:'Housekeeping & consumables',cat:'Supplies',amount:3500,freq:'weekly',date:t,note:''},
+    {id:uid(),name:'Excise license',cat:'Licenses',amount:250000,freq:'yearly',date:t,note:'Annual'},
+  ];
+  const now=Date.now(),dago=n=>now-n*864e5;
+  const pin=(name,q,unit,cost,dg)=>({type:'in',name,sec:'store',detail:`${q} ${unit} → Store room`,value:q*cost,reason:'',who:'Manager',t:dago(dg)});
+  const psale=(name,sec,qty,price,cost,dg)=>({type:'sale',name,sec,detail:`${qty} × ${name}`,value:price*qty,cost:cost*qty,qty,who:'Manager',t:dago(dg)});
+  const plog=[
+    pin('Chicken breast',20,'kg',210,6),pin('Basmati rice',25,'kg',95,6),pin('Old Monk rum',12,'btl',550,10),
+    pin('Gin',6,'btl',1200,10),pin('Kingfisher beer',48,'btl',120,4),pin('Tomatoes',20,'kg',40,3),
+    psale('Butter Chicken','kitchen',20,420,87.5,2),psale('Gin & Tonic','bar',15,350,132.2,2),
+    psale('Kingfisher (bottle)','bar',30,250,120,1),psale('Jeera Rice','kitchen',18,180,23.4,1),
+  ];
+  const lm=new Date();lm.setDate(0);const snaps={[localDate(lm.getTime())]:58000};
+  return {items:its,vendors:vend,recipes:rec,expenses:exp,log:plog,snaps};
 }
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 
@@ -450,8 +512,11 @@ function expStatusLoc(it,loc){const b=nearestBatch(it,loc);if(!b)return'none';co
 const needsReorder=it=>storeStatus(it)!=='ok';
 function hasAttention(it){return needsReorder(it)||['soon','expired'].includes(expStatusLoc(it))}
 function bottleBar(it,loc){
-  const size=it.bottleMl||it.conv;if(!it.pour||!size)return'';
-  const ml=qtyAt(it,loc);const full=Math.floor(ml/size);let openMl=ml-full*size;let pct,lead;
+  const size=bottleSize(it)||it.conv;if(!it.pour||!size)return'';
+  const su=(it.unit||'').toLowerCase();
+  const stock=qtyAt(it,loc);
+  const ml=(su==='ml')?stock:(su==='l'?stock*1000:stock*size); // total ml on hand
+  const full=Math.floor(ml/size+1e-9);let openMl=ml-full*size;let pct,lead;
   if(ml<=0){pct=0;lead='empty';}else if(openMl<1e-6){pct=100;openMl=size;lead=`${full} full`;}else{pct=openMl/size*100;lead=`${full} full + open`;}
   const low=pct<25&&ml>0;
   return `<div class="bottlebar"><div class="track"><div class="fill ${low?'lowb':''}" style="width:${pct.toFixed(0)}%"></div></div>
@@ -472,7 +537,7 @@ function updateNavBadges(){
   const ro=items.filter(needsReorder).length;set('reorder',ro,ro>0);
 }
 function go(v){view=v;document.querySelectorAll('.nav-i').forEach(b=>b.classList.toggle('on',b.dataset.id===v));toggleNav(false);updateNavBadges();
-  ({dashboard:renderDash,store:()=>renderInv('store'),kitchen:()=>renderInv('kitchen'),bar:()=>renderInv('bar'),menu:renderMenu,sales:renderSales,vendors:renderVendors,reorder:renderReorder,count:renderCount,reports:renderReports,log:renderLog}[v]||renderDash)();
+  ({dashboard:renderDash,store:()=>renderInv('store'),kitchen:()=>renderInv('kitchen'),bar:()=>renderInv('bar'),menu:renderMenu,sales:renderSales,expenses:renderExpenses,vendors:renderVendors,reorder:renderReorder,count:renderCount,reports:renderReports,log:renderLog}[v]||renderDash)();
   window.scrollTo(0,0);}
 function toggleNav(open){document.getElementById('aside').classList.toggle('open',open);document.getElementById('scrim').classList.toggle('show',open)}
 
@@ -506,10 +571,14 @@ function renderDash(){
       ${att.length?att.map(i=>{const ss=storeStatus(i),es=expStatusLoc(i);
         let tag=ss==='out'?`<span class="pill out"><span class="dot"></span>Store empty</span>`:es==='expired'?`<span class="pill expired"><span class="dot"></span>Expired batch</span>`:ss==='low'?`<span class="pill low"><span class="dot"></span>Store low · ${fmtN(qtyAt(i,'store'))} ${esc(i.unit)}</span>`:`<span class="pill soon"><span class="dot"></span>Expiring soon</span>`;
         return `<div class="att-row"><span class="nm">${esc(i.name)}</span>${tag}<span class="sec-tag">${vendorName(i.vendorId)}</span></div>`;}).join(''):`<div class="empty"><div class="big">All clear</div><div>Store levels and expiry all look fine.</div></div>`}</div>
-    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
       <div class="stat"><div class="l">Wastage value · last 7 days</div><div class="n" style="font-size:20px;margin-top:6px;color:var(--red)">${money(wasteVal)}</div></div>
-      <div class="stat"><div class="l">Items / menu / vendors</div><div class="n" style="font-size:20px;margin-top:6px">${items.length} · ${recipes.length} · ${vendors.length}</div></div></div>`;
+      <div class="stat"><div class="l">Expenses · this month</div><div class="n" style="font-size:20px;margin-top:6px">${money(monthExpense())}</div><div class="foot">recurring + one-off</div></div>
+      <div class="stat ${monthNet()>=0?'ok':'red'}"><div class="l">Net profit · this month</div><div class="n" style="font-size:20px;margin-top:6px">${money(monthNet())}</div><div class="foot">sales − COGS − expenses</div></div></div>`;
 }
+function monthKey(){return currentYM()}
+function monthExpense(){const mk=monthKey();const rec=expenses.filter(e=>e.freq!=='once').reduce((s,e)=>s+monthlyOf(e),0);const one=expenses.filter(e=>e.freq==='once'&&(e.date||'').slice(0,7)===mk).reduce((s,e)=>s+(+e.amount||0),0);return rec+one}
+function monthNet(){const mk=monthKey();const sales=log.filter(e=>e.type==='sale'&&ymOf(e.t)===mk);const rev=sales.reduce((s,e)=>s+(e.value||0),0);const gu=monthGoodsUsed(mk);const cogs=gu!=null?gu:sales.reduce((s,e)=>s+(e.cost||0),0);return rev-cogs-monthExpense()}
 
 /* ---- inventory views (store / kitchen / bar) ---- */
 function renderInv(loc){
@@ -591,9 +660,17 @@ async function saveItem(e){e.preventDefault();const g=id=>document.getElementByI
     punit:g('f-punit').trim(),conv:parseFloat(g('f-conv'))||0,cost:parseFloat(g('f-cost'))||0,min:parseFloat(g('f-min'))||0,par:parseFloat(g('f-par'))||0,
     pour,bottleMl:pour?(parseFloat(g('f-bottleml'))||parseFloat(g('f-conv'))||0):0};
   if(editId)Object.assign(item(editId),data);
-  else{const q=parseFloat(g('f-qty'))||0,exp=g('f-exp');data.id=uid();data.batches=q>0?[{id:uid(),qty:q,exp:exp||'',in:Date.now(),loc:'store'}]:[];items.push(data);addLog('new',data,`${fmtN(q)} ${data.unit} → store`,0,'','store');}
+  else{const q=parseFloat(g('f-qty'))||0,exp=g('f-exp');data.id=uid();data.batches=q>0?[{id:uid(),qty:q,exp:exp||'',in:Date.now(),loc:'store'}]:[];items.push(data);addLog('new',data,`${fmtN(q)} ${data.unit} → store`,q*(data.cost||0),'','store');}
   await saveItems();closeM('itemOverlay');updateNavBadges();go(editId?view:'store');}
 async function delItem(id){const it=item(id);if(!it)return;if(!confirm(`Delete "${it.name}"? This can't be undone.`))return;addLog('del',it,'',0);items=items.filter(i=>i.id!==id);await saveItems();updateNavBadges();go(view)}
+function suggestPour(){
+  const use=document.getElementById('f-use').value;
+  const unit=(document.getElementById('f-unit').value||'').toLowerCase();
+  const cat=(document.getElementById('f-cat').value||'').toLowerCase();
+  const isSpirit=(use==='bar'||use==='both')&&(/btl|bottle/.test(unit)||/spirit|rum|gin|whisk|vodka|tequila|brandy|liqueur|liquor|wine/.test(cat));
+  const pc=document.getElementById('f-pour');
+  if(isSpirit&&!pc.checked){pc.checked=true;document.getElementById('bottleWrap').style.display='';if(!document.getElementById('f-bottleml').value)document.getElementById('f-bottleml').value=750;}
+}
 
 /* ---- receive / out ---- */
 function openQty(id,dir,loc){const it=item(id);if(!it)return;qtyCtx={id,dir,useP:false};
@@ -722,8 +799,11 @@ function renderMenu(){
 }
 function openRecipe(id){const r=id?recipes.find(x=>x.id===id):null;editRecipeId=id||null;
   recipeDraft=r?JSON.parse(JSON.stringify(r.items)):[];
-  recipeDraft.forEach(c=>{if(c.itemId&&(c.u==null||c.uq==null)){const it=item(c.itemId);const su=(it?it.unit:'').toLowerCase();
-    if(su==='kg'&&c.qty<1){c.u='g';c.uq=+(c.qty*1000).toFixed(3);}else if(su==='l'&&c.qty<1){c.u='ml';c.uq=+(c.qty*1000).toFixed(3);}else{c.u=it?it.unit:'';c.uq=c.qty;}}});
+  recipeDraft.forEach(c=>{if(c.itemId&&(c.u==null||c.uq==null)){const it=item(c.itemId);const su=(it?it.unit:'').toLowerCase();const bs=bottleSize(it);
+    if(su==='kg'&&c.qty<1){c.u='g';c.uq=+(c.qty*1000).toFixed(3);}
+    else if(su==='l'&&c.qty<1){c.u='ml';c.uq=+(c.qty*1000).toFixed(3);}
+    else if(bs&&su!=='ml'&&su!=='l'){c.u='ml';c.uq=+(c.qty*bs).toFixed(2);}
+    else{c.u=it?it.unit:'';c.uq=c.qty;}}});
   document.getElementById('recipeTitle').textContent=id?'Edit menu item':'Add menu item';
   document.getElementById('r-name').value=r?r.name:'';document.getElementById('r-outlet').value=r?r.outlet:'kitchen';
   document.getElementById('r-cat').value=r?r.cat||'':'';document.getElementById('r-price').value=r?r.price||'':'';
@@ -731,18 +811,28 @@ function openRecipe(id){const r=id?recipes.find(x=>x.id===id):null;editRecipeId=
 let editRecipeId=null;
 function outletItems(){const o=document.getElementById('r-outlet').value;return items.filter(i=>i.use===o||i.use==='both').sort((a,b)=>a.name.localeCompare(b.name))}
 function renderIngPicker(){renderIngList()}
-function subUnits(su){su=(su||'').toLowerCase();if(su==='kg'||su==='g')return['g','kg'];if(su==='l'||su==='ml')return['ml','L'];return[su||'unit']}
+function bottleSize(it){return +(it&&(it.bottleMl||it.mlPerBottle))||0}
+function ingUnitOptions(it){const su=(it&&it.unit||'').toLowerCase();
+  if(su==='kg'||su==='g')return['g','kg'];
+  if(su==='l'||su==='ml')return['ml','L'];
+  if(bottleSize(it))return['ml',it.unit];
+  return[it&&it.unit||'unit'];}
 function dispU(u){return {g:'g',kg:'kg',l:'L',ml:'ml'}[(u||'').toLowerCase()]||u}
-function unitFactor(u,su){u=(u||'').toLowerCase();su=(su||'').toLowerCase();if(u===su)return 1;if(su==='kg'&&u==='g')return .001;if(su==='g'&&u==='kg')return 1000;if(su==='l'&&u==='ml')return .001;if(su==='ml'&&u==='l')return 1000;return 1}
-function recomputeIng(idx){const c=recipeDraft[idx];const it=item(c.itemId);c.qty=(parseFloat(c.uq)||0)*unitFactor(c.u,it?it.unit:'')}
-function setIngItem(idx,v){recipeDraft[idx].itemId=v;const it=item(v);const us=it?subUnits(it.unit):[];recipeDraft[idx].u=us[0]||'';recomputeIng(idx);renderIngList()}
+function ingFactor(u,it){const su=(it&&it.unit||'').toLowerCase();const uu=(u||'').toLowerCase();
+  if(uu===su)return 1;
+  if(su==='kg'&&uu==='g')return .001;if(su==='g'&&uu==='kg')return 1000;
+  if(su==='l'&&uu==='ml')return .001;if(su==='ml'&&uu==='l')return 1000;
+  if(uu==='ml'&&bottleSize(it))return 1/bottleSize(it);
+  return 1;}
+function recomputeIng(idx){const c=recipeDraft[idx];const it=item(c.itemId);c.qty=(parseFloat(c.uq)||0)*ingFactor(c.u,it)}
+function setIngItem(idx,v){recipeDraft[idx].itemId=v;const it=item(v);const us=it?ingUnitOptions(it):[];recipeDraft[idx].u=us[0]||'';recomputeIng(idx);renderIngList()}
 function setIngQty(idx,v){recipeDraft[idx].uq=parseFloat(v)||0;recomputeIng(idx);updateRecipeCost()}
 function setIngUnit(idx,v){recipeDraft[idx].u=v;recomputeIng(idx);updateRecipeCost()}
 function addIngRow(){recipeDraft.push({itemId:'',qty:'',uq:'',u:''});renderIngList()}
 function renderIngList(){
   const opts=outletItems();
   document.getElementById('ingList').innerHTML=recipeDraft.map((c,idx)=>{
-    const it=item(c.itemId);const us=it?subUnits(it.unit):[];
+    const it=item(c.itemId);const us=it?ingUnitOptions(it):[];
     const unitSel=it?`<select onchange="setIngUnit(${idx},this.value)">${us.map(u=>`<option value="${u}" ${u===c.u?'selected':''}>${dispU(u)}</option>`).join('')}</select>`:`<select disabled><option>—</option></select>`;
     return `<div class="ing-row">
       <select onchange="setIngItem(${idx},this.value)"><option value="">— pick item —</option>${opts.map(i=>`<option value="${i.id}" ${i.id===c.itemId?'selected':''}>${esc(i.name)} (${esc(i.unit)})</option>`).join('')}</select>
@@ -808,6 +898,149 @@ async function undoSale(t){const idx=log.findIndex(e=>e.type==='sale'&&String(e.
   if(!confirm(`Undo "${e.detail}"? Ingredients will be added back to the ${SEC_LABEL[e.sec]}.`))return;
   (e.ing||[]).forEach(c=>{const it=item(c.itemId);if(it)it.batches.push({id:uid(),qty:c.qty,exp:'',in:Date.now(),loc:e.sec});});
   log.splice(idx,1);await saveLog();await saveItems();updateNavBadges();renderSalesBody();}
+
+/* ---- expenses ---- */
+const EXP_CATS=['Rent','Salaries','Utilities','Gas','Water','Internet & phone','Licenses','Repairs','Marketing','Supplies','Delivery commission','Bank & loan','Other'];
+const FREQ_LABEL={once:'One-time',weekly:'Weekly',monthly:'Monthly',yearly:'Yearly'};
+const FREQ_TO_MONTH={weekly:52/12,monthly:1,yearly:1/12,once:0};
+function monthlyOf(e){return (+e.amount||0)*(FREQ_TO_MONTH[e.freq]||0)}
+let expMonth=currentYM(); // YYYY-MM
+function renderExpenses(){
+  document.getElementById('view').innerHTML=`
+    <div class="page-head"><div><div class="page-title">Expenses &amp; P&amp;L</div><div class="page-sub">Inventory spend, overheads and monthly profit — properly accounted</div></div>
+      <div class="head-actions"><input class="dt" type="month" id="emonth" value="${expMonth}" onchange="expMonth=this.value;renderExpenseBody()">
+        <button class="btn ghost" onclick="printExpenseReport()">⎙ Report</button>
+        <button class="btn ghost" onclick="exportExpensesCSV()">⬇ CSV</button>
+        <button class="btn" onclick="openExpense()">+ Add expense</button></div></div>
+    <div id="expBody"></div>`;
+  renderExpenseBody();
+}
+function monthName(ym){const [y,mo]=ym.split('-').map(Number);return new Date(y,mo-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}
+function renderExpenseBody(){
+  const recurring=expenses.filter(e=>e.freq!=='once');
+  const oneTime=expenses.filter(e=>e.freq==='once'&&(e.date||'').slice(0,7)===expMonth);
+  const recMonthly=recurring.reduce((s,e)=>s+monthlyOf(e),0);
+  const oneTotal=oneTime.reduce((s,e)=>s+(+e.amount||0),0);
+  const opex=recMonthly+oneTotal;
+  // inventory accounting
+  const openV=monthOpen(expMonth), closeV=monthClosing(expMonth), purch=monthPurchases(expMonth);
+  const goodsUsed=monthGoodsUsed(expMonth); // opening + purchases − closing
+  const isCur=expMonth===currentYM();
+  // sales this month
+  const sales=log.filter(e=>e.type==='sale'&&ymOf(e.t)===expMonth);
+  const rev=sales.reduce((s,e)=>s+(e.value||0),0), theoCogs=sales.reduce((s,e)=>s+(e.cost||0),0);
+  const realCogs=(goodsUsed!=null)?goodsUsed:theoCogs;
+  const net=rev-realCogs-opex;
+  const cashOut=purch+opex; // money actually spent this month
+  // category breakdown
+  const byCat={};expenses.forEach(e=>{const m=e.freq==='once'?((e.date||'').slice(0,7)===expMonth?(+e.amount||0):0):monthlyOf(e);if(m)byCat[e.cat]=(byCat[e.cat]||0)+m});
+  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);const maxCat=cats.length?cats[0][1]:1;
+  const mn=monthName(expMonth);
+  document.getElementById('expBody').innerHTML=`
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+      <div class="stat blue"><div class="n" style="font-size:20px">${money(rev)}</div><div class="l">Sales revenue</div></div>
+      <div class="stat"><div class="n" style="font-size:20px">${money(realCogs)}</div><div class="l">Goods used (cost)</div><div class="foot">${goodsUsed!=null?'from stock':'est. from recipes'}</div></div>
+      <div class="stat red"><div class="n" style="font-size:20px">${money(opex)}</div><div class="l">Overheads</div></div>
+      <div class="stat ${net>=0?'ok':'red'}"><div class="n" style="font-size:20px">${money(net)}</div><div class="l">Net profit · ${mn}</div></div></div>
+
+    <div class="panel" style="margin-bottom:16px"><div class="panel-h"><h3>Inventory this month</h3><span class="hint">${isCur?'live closing value':'month-end value'}</span></div>
+      <table><tbody>
+        <tr><td>Opening stock <span class="sub-inline">(carried in)</span></td><td class="num val">${openV!=null?money(openV):'<span class="unit">not recorded</span>'}</td></tr>
+        <tr><td>+ Purchases <span class="sub-inline">(bought this month)</span></td><td class="num val" style="color:var(--ok)">${money(purch)}</td></tr>
+        <tr><td>− Closing stock <span class="sub-inline">(carried forward)</span></td><td class="num val" style="color:var(--blue)">${closeV!=null?money(closeV):'<span class="unit">—</span>'}</td></tr>
+        <tr style="font-weight:700;border-top:2px solid var(--ink)"><td>= Goods actually used</td><td class="num val">${goodsUsed!=null?money(goodsUsed):'<span class="unit">needs opening + closing</span>'}</td></tr>
+      </tbody></table>
+      <div style="padding:10px 16px;font-size:11.5px;color:var(--ink-faint)">
+        ${goodsUsed!=null?`Your real food/bev spend for ${mn}. Recipe-estimated cost was ${money(theoCogs)}${theoCogs?` — variance ${money(goodsUsed-theoCogs)} (wastage, over-portioning, etc.)`:''}.`:`Opening stock builds automatically once the app has been used across a month boundary. Purchases and closing are live.`}
+        Money actually spent this month (purchases + overheads): <b>${money(cashOut)}</b>.
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-bottom:16px">
+      <div class="panel"><div class="panel-h"><h3>Overheads breakdown</h3><span class="hint">${mn} · monthly view</span></div>
+        ${cats.length?`<div style="padding:6px 4px">${cats.map(([c,v])=>`<div style="padding:9px 14px"><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px"><span style="font-weight:600">${esc(c)}</span><span class="val">${money(v)} <span class="unit">/mo</span></span></div><div class="bottlebar" style="max-width:none;margin:0"><div class="track"><div class="fill" style="width:${Math.max(4,v/maxCat*100).toFixed(0)}%"></div></div></div></div>`).join('')}</div>`:`<div class="empty"><div class="big">No overheads</div><div>Add rent, salaries, bills…</div></div>`}
+      </div>
+      <div class="panel"><div class="panel-h"><h3>Monthly P&amp;L</h3></div>
+        <table><tbody>
+          <tr><td>Sales revenue</td><td class="num val">${money(rev)}</td></tr>
+          <tr><td>− Goods used</td><td class="num val" style="color:var(--red)">${money(realCogs)}</td></tr>
+          <tr style="font-weight:600"><td>Gross profit</td><td class="num val">${money(rev-realCogs)}</td></tr>
+          <tr><td>− Recurring overheads</td><td class="num val" style="color:var(--red)">${money(recMonthly)}</td></tr>
+          <tr><td>− One-off (this month)</td><td class="num val" style="color:var(--red)">${money(oneTotal)}</td></tr>
+          <tr style="font-weight:700;border-top:2px solid var(--ink)"><td>Net profit</td><td class="num val" style="color:${net>=0?'var(--ok)':'var(--red)'}">${money(net)}</td></tr>
+        </tbody></table>
+        <div style="padding:10px 16px;font-size:11.5px;color:var(--ink-faint)">Weekly ×4.33/mo, yearly ÷12. Goods used = opening + purchases − closing stock.</div>
+      </div></div>
+
+    <div class="panel"><div class="panel-h"><h3>All overheads</h3><span class="hint">${expenses.length} entries · recurring shown as monthly cost</span></div>
+      ${expenses.length?`<table><thead><tr><th>Expense</th><th>Category</th><th>How often</th><th class="num">Amount</th><th class="num">Per month</th><th></th></tr></thead>
+        <tbody>${expenses.slice().sort((a,b)=>monthlyOf(b)-monthlyOf(a)).map(e=>`<tr>
+          <td><div class="iname">${esc(e.name)}</div>${e.note?`<div class="icat">${esc(e.note)}</div>`:''}</td>
+          <td><span class="pill use">${esc(e.cat||'Other')}</span></td>
+          <td>${FREQ_LABEL[e.freq]||e.freq}${e.freq==='once'&&e.date?` · ${fmtDate(e.date)}`:''}</td>
+          <td class="num val">${money(e.amount)}</td>
+          <td class="num val">${e.freq==='once'?'<span class="unit">—</span>':money(monthlyOf(e))}</td>
+          <td><div class="row-actions"><button class="mini" title="Edit" onclick="openExpense('${e.id}')">✎</button><button class="mini" title="Delete" onclick="delExpense('${e.id}')">🗑</button></div></td></tr>`).join('')}</tbody></table>`
+        :`<div class="empty"><div class="big">No expenses yet</div><div>Add rent, salaries, bills and supplies to track your monthly costs.</div></div>`}
+    </div>`;
+}
+function exportExpensesCSV(){
+  const head=['Month','Section','Line','Category','Amount'];
+  const rows=[];
+  rows.push(['','Inventory','Opening stock','',fmtN(monthOpen(expMonth)||0)]);
+  rows.push(['','Inventory','Purchases','',fmtN(monthPurchases(expMonth))]);
+  rows.push(['','Inventory','Closing stock','',fmtN(monthClosing(expMonth)||0)]);
+  rows.push(['','Inventory','Goods used','',fmtN(monthGoodsUsed(expMonth)||0)]);
+  expenses.forEach(e=>rows.push(['',e.freq==='once'?'One-off':'Recurring',e.name,e.cat,fmtN(e.freq==='once'?(+e.amount||0):monthlyOf(e))]));
+  const out=[head.join(','),...rows.map(r=>[expMonth,...r.slice(1)].map(csvCell).join(','))].join('\n');
+  dl('goat-expenses-'+expMonth+'.csv',out,'text/csv');
+}
+function printExpenseReport(){
+  const mn=monthName(expMonth);
+  const openV=monthOpen(expMonth),closeV=monthClosing(expMonth),purch=monthPurchases(expMonth),gu=monthGoodsUsed(expMonth);
+  const sales=log.filter(e=>e.type==='sale'&&ymOf(e.t)===expMonth);const rev=sales.reduce((s,e)=>s+(e.value||0),0);
+  const recMonthly=expenses.filter(e=>e.freq!=='once').reduce((s,e)=>s+monthlyOf(e),0);
+  const oneTotal=expenses.filter(e=>e.freq==='once'&&(e.date||'').slice(0,7)===expMonth).reduce((s,e)=>s+(+e.amount||0),0);
+  const opex=recMonthly+oneTotal;const realCogs=gu!=null?gu:sales.reduce((s,e)=>s+(e.cost||0),0);const net=rev-realCogs-opex;
+  const R=(a,b,bold)=>`<tr${bold?' style="font-weight:700"':''}><td>${a}</td><td class="num">${b}</td></tr>`;
+  const body=`
+    <div class="p-sec">Inventory movement</div><table>
+      ${R('Opening stock (carried in)',openV!=null?money(openV):'—')}
+      ${R('Add: Purchases this month',money(purch))}
+      ${R('Less: Closing stock (carried forward)',closeV!=null?money(closeV):'—')}
+      ${R('Cost of goods used',gu!=null?money(gu):'—',true)}
+    </table>
+    <div class="p-sec">Overheads</div><table><thead><tr><th>Expense</th><th>Category</th><th>Frequency</th><th class="num">Per month</th></tr></thead><tbody>
+      ${expenses.slice().sort((a,b)=>monthlyOf(b)-monthlyOf(a)).map(e=>`<tr><td>${esc(e.name)}</td><td>${esc(e.cat||'')}</td><td>${FREQ_LABEL[e.freq]||e.freq}</td><td class="num">${e.freq==='once'?(((e.date||'').slice(0,7)===expMonth)?money(e.amount):'—'):money(monthlyOf(e))}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td colspan="3">Total overheads</td><td class="num">${money(opex)}</td></tr>
+    </tbody></table>
+    <div class="p-sec">Profit &amp; loss</div><table>
+      ${R('Sales revenue',money(rev))}
+      ${R('Less: Cost of goods used',money(realCogs))}
+      ${R('Gross profit',money(rev-realCogs),true)}
+      ${R('Less: Overheads',money(opex))}
+      ${R('Net profit',money(net),true)}
+    </table>`;
+  printHTML('Expense &amp; P&L report — '+mn,'Signature Culinary',body);
+}
+let editExpId=null;
+function openExpense(id){editExpId=id||null;const e=id?expenses.find(x=>x.id===id):null;
+  document.getElementById('expenseTitle').textContent=id?'Edit expense':'Add expense';
+  document.getElementById('e-cat').innerHTML=EXP_CATS.map(c=>`<option ${e&&e.cat===c?'selected':''}>${c}</option>`).join('');
+  document.getElementById('e-name').value=e?e.name:'';
+  document.getElementById('e-amount').value=e?e.amount:'';
+  document.getElementById('e-freq').value=e?e.freq:'monthly';
+  document.getElementById('e-date').value=e?(e.date||''):new Date().toISOString().slice(0,10);
+  document.getElementById('e-note').value=e?(e.note||''):'';
+  document.getElementById('e-hint').textContent='';
+  openM('expenseOverlay');
+}
+async function saveExpense(ev){ev.preventDefault();const g=k=>document.getElementById('e-'+k).value;
+  const data={name:g('name').trim(),cat:g('cat'),amount:parseFloat(g('amount'))||0,freq:g('freq'),date:g('date'),note:g('note').trim()};
+  if(editExpId)Object.assign(expenses.find(x=>x.id===editExpId),data);else{data.id=uid();expenses.push(data);}
+  await saveExpenses();closeM('expenseOverlay');renderExpenses();
+}
+async function delExpense(id){const e=expenses.find(x=>x.id===id);if(!e)return;if(!confirm(`Delete "${e.name}"?`))return;expenses=expenses.filter(x=>x.id!==id);await saveExpenses();renderExpenses();}
 
 /* ---- reorder ---- */
 function renderReorder(){
@@ -930,7 +1163,7 @@ async function rmStaff(s){settings.staff=settings.staff.filter(x=>x!==s);if(sett
 
 /* ---- data ---- */
 function openData(){document.getElementById('restoreTA').value='';openM('dataOverlay')}
-function downloadBackup(){dl('goat-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({version:3,exported:new Date().toISOString(),items,vendors,recipes,log,settings},null,2),'application/json')}
+function downloadBackup(){dl('goat-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({version:3,exported:new Date().toISOString(),items,vendors,recipes,expenses,valSnaps,log,settings},null,2),'application/json')}
 function exportCSV(){const head=['Item','Category','Used in','Vendor','Unit','Cost/unit','Store','Kitchen','Bar','Total','Value','Reorder at','Par'];
   const rows=items.map(i=>[i.name,i.cat||'',i.use,vendorName(i.vendorId),i.unit,i.cost||0,fmtN(qtyAt(i,'store')),fmtN(qtyAt(i,'kitchen')),fmtN(qtyAt(i,'bar')),fmtN(totalQty(i)),fmtN(itemValue(i)),i.min||'',i.par||''].map(csvCell).join(','));
   dl('goat-inventory-'+new Date().toISOString().slice(0,10)+'.csv',[head.join(','),...rows].join('\n'),'text/csv');}
@@ -940,8 +1173,8 @@ function fileToTA(e){const f=e.target.files[0];if(!f)return;const r=new FileRead
 async function doRestore(){const raw=document.getElementById('restoreTA').value.trim();if(!raw)return;let p;try{p=JSON.parse(raw)}catch{alert('Not valid JSON.');return}
   if(!p.items||!Array.isArray(p.items)){alert('No items in this file.');return}
   if(!confirm('Restore REPLACES all current data with this backup. Continue?'))return;
-  items=p.items;vendors=p.vendors||[];recipes=p.recipes||[];log=p.log||[];settings={...settings,...(p.settings||{})};
-  await saveItems();await saveVendors();await saveRecipes();await saveLog();await saveSet();closeM('dataOverlay');renderStaff();updateNavBadges();go('dashboard');}
+  items=p.items;vendors=p.vendors||[];recipes=p.recipes||[];expenses=p.expenses||[];valSnaps=p.valSnaps||{};log=p.log||[];settings={...settings,...(p.settings||{})};
+  await saveItems();await saveVendors();await saveRecipes();await saveExpenses();await saveSnaps();await saveLog();await saveSet();closeM('dataOverlay');renderStaff();updateNavBadges();go('dashboard');}
 
 /* ---- print ---- */
 function printHTML(title,sub,html){document.getElementById('print-area').innerHTML=`<div class="p-title">GOAT — ${title}</div><div class="p-sub">Signature Culinary · ${sub}</div>${html}`;window.print()}
