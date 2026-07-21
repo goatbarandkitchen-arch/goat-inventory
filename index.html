@@ -367,8 +367,8 @@ async function reloadAll(){
 /* ===== Backend =====
    Paste your Supabase project URL + anon key below to sync across devices.
    Leave blank to use this device only (localStorage). See setup notes. */
-const SUPABASE_URL='';          // e.g. https://abcd1234.supabase.co
-const SUPABASE_ANON='';         // publishable key (sb_publishable_...) or legacy anon key
+const SUPABASE_URL='https://iduyoxahdcqsutncezmn.supabase.co';          // e.g. https://abcd1234.supabase.co
+const SUPABASE_ANON='sb_publishable_jYw0UYwSwQqIJGgmGD2XkQ_3JaakJqA';         // publishable key (sb_publishable_...) or legacy anon key
 const CLOUD=!!(SUPABASE_URL&&SUPABASE_ANON);
 const SB_HEAD={apikey:SUPABASE_ANON,Authorization:'Bearer '+SUPABASE_ANON,'Content-Type':'application/json'};
 function lget(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}}
